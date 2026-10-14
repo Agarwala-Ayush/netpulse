@@ -1,0 +1,34 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose      # HTTP response bodies must be closed
+    - errorlint      # correct use of errors.Is / errors.As / %w
+    - gosec          # security issues (InsecureSkipVerify, file perms, ...)
+    - misspell
+    - noctx          # HTTP requests must carry a context
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments: [disableStutteringCheck]
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx, unparam, bodyclose]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/agarwala-ayush/netpulse

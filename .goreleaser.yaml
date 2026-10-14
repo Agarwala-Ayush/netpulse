@@ -1,0 +1,47 @@
+# GoReleaser builds release binaries for every OS/arch from one Linux runner.
+# Docs: https://goreleaser.com
+version: 2
+
+project_name: netpulse
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: netpulse
+    main: ./cmd/netpulse
+    binary: netpulse
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w
+      - -X github.com/agarwala-ayush/netpulse/internal/version.Version={{ .Version }}
+      - -X github.com/agarwala-ayush/netpulse/internal/version.Commit={{ .ShortCommit }}
+      - -X github.com/agarwala-ayush/netpulse/internal/version.Date={{ .Date }}
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - configs/netpulse.example.yaml
+      - deploy/systemd/netpulse.service
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

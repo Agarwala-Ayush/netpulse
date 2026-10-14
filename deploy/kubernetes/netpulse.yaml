@@ -1,0 +1,106 @@
+# Kubernetes deployment for NetPulse.
+#   kubectl apply -f deploy/kubernetes/netpulse.yaml
+#   kubectl -n netpulse port-forward svc/netpulse 9469:9469
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netpulse
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netpulse-config
+  namespace: netpulse
+data:
+  netpulse.yaml: |
+    interval: 30s
+    timeout: 10s
+    concurrency: 16
+    targets:
+      - name: kubernetes-api
+        host: kubernetes.default.svc
+        tcp: { port: 443 }       # API server cert is signed by the cluster CA; add
+                                 # tls: { ca_file: ... } with a mounted CA bundle to check it
+      - name: cluster-dns
+        host: kubernetes.default.svc.cluster.local
+        dns: { types: [A] }
+      - name: github
+        host: github.com
+        dns: {}
+        http: { url: https://github.com/ }
+        tls: {}
+        tcp: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netpulse
+  namespace: netpulse
+  labels: { app.kubernetes.io/name: netpulse }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: netpulse }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: netpulse }
+      annotations:
+        # For Prometheus setups that use annotation-based discovery.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9469"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: netpulse
+          image: ghcr.io/agarwala-ayush/netpulse:latest
+          args: ["serve", "--config", "/etc/netpulse/netpulse.yaml", "--log-format", "json"]
+          ports:
+            - { name: http, containerPort: 9469 }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 20m, memory: 32Mi }
+            limits: { memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          volumeMounts:
+            - { name: config, mountPath: /etc/netpulse, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: netpulse-config }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: netpulse
+  namespace: netpulse
+  labels: { app.kubernetes.io/name: netpulse }
+spec:
+  selector: { app.kubernetes.io/name: netpulse }
+  ports:
+    - { name: http, port: 9469, targetPort: http }
+---
+# Requires the Prometheus Operator (kube-prometheus-stack). Delete this
+# document if you don't run it.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: netpulse
+  namespace: netpulse
+spec:
+  selector:
+    matchLabels: { app.kubernetes.io/name: netpulse }
+  endpoints:
+    - port: http
+      interval: 30s

@@ -1,0 +1,77 @@
+# Prometheus alerting rules for NetPulse.
+# Validate with: promtool check rules deploy/prometheus/alerts.yml
+groups:
+  - name: netpulse
+    rules:
+      - alert: NetPulseCheckFailing
+        # `for: 2m` requires several consecutive failures before paging,
+        # which filters out single blips (a lost packet, a slow response).
+        expr: netpulse_check_up{group!="canary"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.check | toUpper }} check failing for {{ $labels.target }}"
+          description: "The {{ $labels.check }} check against {{ $labels.target }} has been failing for more than 2 minutes."
+
+      - alert: NetPulseTLSCertExpiringSoon
+        expr: (netpulse_tls_cert_expiry_timestamp_seconds{group!="canary"} - time()) / 86400 < 14
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires in {{ $value | humanize }} days"
+          description: "Renew the certificate before it expires; check your ACME/cert-manager automation."
+
+      - alert: NetPulseTLSCertExpiryCritical
+        expr: (netpulse_tls_cert_expiry_timestamp_seconds{group!="canary"} - time()) / 86400 < 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TLS certificate for {{ $labels.target }} expires in {{ $value | humanize }} days"
+
+      - alert: NetPulseHighHTTPLatency
+        # p95 over 10 minutes, computed from the histogram buckets.
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, target) (rate(netpulse_check_duration_seconds_bucket{check="http"}[10m]))
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 HTTP latency for {{ $labels.target }} is {{ $value | humanizeDuration }}"
+
+      - alert: NetPulseTCPPacketLoss
+        expr: avg_over_time(netpulse_tcp_loss_ratio[10m]) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $value | humanizePercentage }} TCP connect loss to {{ $labels.target }}"
+
+      - alert: NetPulseStale
+        # Catches a wedged scheduler: the exporter is up but checks stopped.
+        expr: time() - netpulse_check_last_run_timestamp_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No results for {{ $labels.target }}/{{ $labels.check }} in 5 minutes"
+
+      - alert: NetPulseDown
+        expr: up{job="netpulse"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NetPulse exporter is unreachable — no network health data is being collected"
+
+      - alert: NetPulseConfigReloadFailed
+        expr: netpulse_config_last_reload_successful == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "NetPulse rejected its new configuration; still running the previous one"

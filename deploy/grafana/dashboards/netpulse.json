@@ -1,0 +1,307 @@
+{
+  "uid": "netpulse",
+  "title": "NetPulse — Network Health",
+  "description": "DNS, HTTP, TLS and TCP latency checks exported by NetPulse.",
+  "tags": ["netpulse", "network", "blackbox"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": { "selected": true, "text": "Prometheus", "value": "prometheus" }
+      },
+      {
+        "name": "group",
+        "label": "Group",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": { "query": "label_values(netpulse_check_up, group)", "refId": "group" },
+        "definition": "label_values(netpulse_check_up, group)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "refresh": 2,
+        "sort": 1
+      },
+      {
+        "name": "target",
+        "label": "Target",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": { "query": "label_values(netpulse_check_up{group=~\"$group\"}, target)", "refId": "target" },
+        "definition": "label_values(netpulse_check_up{group=~\"$group\"}, target)",
+        "includeAll": true,
+        "multi": true,
+        "allValue": ".*",
+        "current": { "selected": true, "text": ["All"], "value": ["$__all"] },
+        "refresh": 2,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Checks passing",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum(netpulse_check_up{group=~\"$group\", target=~\"$target\"}) / count(netpulse_check_up{group=~\"$group\", target=~\"$target\"})" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "orange", "value": 0.9 }, { "color": "green", "value": 0.99 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Failing checks",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "count(netpulse_check_up{group=~\"$group\", target=~\"$target\"} == 0) or vector(0)" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Warnings",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sum(netpulse_check_status{status=\"warn\", group=~\"$group\", target=~\"$target\"}) or vector(0)" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Soonest cert expiry",
+      "description": "Days until the earliest-expiring certificate (excluding the 'canary' group).",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "min((netpulse_tls_cert_expiry_timestamp_seconds{group!=\"canary\", group=~\"$group\", target=~\"$target\"} - time()) / 86400)" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "orange", "value": 7 }, { "color": "green", "value": 30 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "p95 HTTP latency",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le) (rate(netpulse_check_duration_seconds_bucket{check=\"http\", group=~\"$group\", target=~\"$target\"}[$__rate_interval])))" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 2 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 6,
+      "type": "state-timeline",
+      "title": "Check status over time",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "max by (target, check) (netpulse_check_status{status=\"warn\", group=~\"$group\", target=~\"$target\"} + ignoring(status) (2 * netpulse_check_status{status=\"fail\", group=~\"$group\", target=~\"$target\"}))",
+          "legendFormat": "{{target}} / {{check}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null }, { "color": "orange", "value": 1 }, { "color": "red", "value": 2 }
+          ] },
+          "mappings": [
+            { "type": "value", "options": {
+              "0": { "text": "OK", "color": "green" },
+              "1": { "text": "WARN", "color": "orange" },
+              "2": { "text": "FAIL", "color": "red" }
+            } }
+          ]
+        },
+        "overrides": []
+      },
+      "options": { "showValue": "never", "mergeValues": true, "rowHeight": 0.8, "legend": { "showLegend": false } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "HTTP latency by target",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "netpulse_check_latency_seconds{check=\"http\", group=~\"$group\", target=~\"$target\"}", "legendFormat": "{{target}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "HTTP phase breakdown (stacked)",
+      "description": "Where request time is spent: DNS, TCP connect, TLS handshake, server processing (TTFB) and transfer.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "avg by (phase) (netpulse_check_phase_duration_seconds{check=\"http\", group=~\"$group\", target=~\"$target\"})", "legendFormat": "{{phase}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 60, "stacking": { "mode": "normal" }, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } }
+    },
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "TLS certificate days remaining",
+      "gridPos": { "h": 9, "w": 8, "x": 0, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "sort((netpulse_tls_cert_expiry_timestamp_seconds{group=~\"$group\", target=~\"$target\"} - time()) / 86400)", "legendFormat": "{{target}}", "instant": true }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d",
+          "decimals": 0,
+          "min": 0,
+          "max": 90,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "orange", "value": 7 }, { "color": "green", "value": 30 }
+          ] }
+        },
+        "overrides": []
+      },
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "showUnfilled": true, "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "TCP connect RTT (avg) and jitter",
+      "gridPos": { "h": 9, "w": 8, "x": 8, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "netpulse_tcp_rtt_seconds{stat=\"avg\", group=~\"$group\", target=~\"$target\"}", "legendFormat": "{{target}} avg" },
+        { "refId": "B", "expr": "netpulse_tcp_rtt_seconds{stat=\"jitter\", group=~\"$group\", target=~\"$target\"}", "legendFormat": "{{target}} jitter" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0, "showPoints": "never" } },
+        "overrides": [
+          { "matcher": { "id": "byRegexp", "options": ".*jitter" }, "properties": [ { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "DNS resolution time",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 23 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "refId": "A", "expr": "netpulse_check_latency_seconds{check=\"dns\", group=~\"$group\", target=~\"$target\"}", "legendFormat": "{{target}}" }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s", "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 8, "showPoints": "never" } },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Availability (selected range)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (target, check) (increase(netpulse_check_runs_total{status!=\"fail\", group=~\"$group\", target=~\"$target\"}[$__range])) / sum by (target, check) (increase(netpulse_check_runs_total{group=~\"$group\", target=~\"$target\"}[$__range]))",
+          "format": "table",
+          "instant": true
+        }
+      ],
+      "transformations": [
+        { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "Value": "Availability", "target": "Target", "check": "Check" } } }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "align": "auto" },
+          "unit": "percentunit",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "orange", "value": 0.99 }, { "color": "green", "value": 0.999 }
+          ] }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Availability" }, "properties": [ { "id": "custom.cellOptions", "value": { "type": "color-background" } } ] }
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "Availability", "desc": false } ] }
+    }
+  ]
+}

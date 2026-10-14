@@ -1,0 +1,11 @@
+# Render Blueprint — see docs/DEPLOYMENT.md
+# Dashboard → New → Blueprint → select this repository.
+services:
+  - type: web
+    name: netpulse
+    runtime: docker
+    plan: free           # free instances sleep after ~15 min idle; use "starter" for 24/7 monitoring
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    autoDeploy: true
+    # Render injects $PORT; netpulse listens on it automatically.

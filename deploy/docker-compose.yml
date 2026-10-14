@@ -1,0 +1,58 @@
+# Full observability stack in one command:
+#   docker compose -f deploy/docker-compose.yml up -d --build
+#
+#   NetPulse dashboard  http://localhost:9469
+#   Prometheus          http://localhost:9090   (alerts: Status → Rules)
+#   Grafana             http://localhost:3000   (NetPulse dashboard pre-provisioned)
+name: netpulse
+
+services:
+  netpulse:
+    build:
+      context: ..
+    image: netpulse:local
+    restart: unless-stopped
+    ports:
+      - "9469:9469"
+    volumes:
+      # Edit ../configs/netpulse.example.yaml then `docker compose kill -s HUP netpulse`
+      # to hot-reload without a restart.
+      - ../configs/netpulse.example.yaml:/etc/netpulse/netpulse.yaml:ro
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    depends_on: [netpulse]
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/netpulse.json
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on: [prometheus]
+
+volumes:
+  prometheus-data:
+  grafana-data:

@@ -1,0 +1,148 @@
+# NetPulse configuration
+# ======================
+# Generate a fresh copy with:   netpulse init
+# Validate it with:             netpulse validate -c netpulse.yaml
+# Run once:                     netpulse check -c netpulse.yaml
+# Run as an exporter:           netpulse serve -c netpulse.yaml
+#
+# Every check is enabled simply by being present. `dns: {}` enables DNS with
+# all defaults. ${ENV_VARS} are expanded, so secrets never live in this file.
+# Unknown keys are rejected, so a typo can never silently disable an assertion.
+
+interval: 30s        # how often each check runs (per-target override allowed)
+timeout: 10s         # per-check deadline; must not exceed the interval
+concurrency: 16      # maximum checks in flight at once
+
+server:
+  listen: ":9469"    # `netpulse serve` address (overridden by --listen or $PORT)
+  title: "NetPulse"  # dashboard title
+  history: 120       # results kept per check for dashboard sparklines
+
+targets:
+  # ── Core internet services ───────────────────────────────────────────────
+  - name: google
+    host: google.com
+    group: search
+    dns:
+      types: [A, AAAA]
+    http:
+      url: https://www.google.com/
+      expect_status: [200]
+    tls: {}
+    tcp: {}
+
+  - name: github
+    host: github.com
+    group: developer
+    dns:
+      types: [A, MX]
+    http:
+      url: https://github.com/
+      expect_status: [200]
+      latency_warn: 2s
+    tls:
+      warn_days: 21
+    tcp:
+      count: 5
+
+  - name: github-api
+    host: api.github.com
+    group: developer
+    http:
+      url: https://api.github.com/zen
+      expect_status: [200]
+      headers:
+        Accept: application/vnd.github+json
+    tls: {}
+
+  - name: cloudflare
+    host: cloudflare.com
+    group: cdn
+    dns:
+      server: 1.1.1.1:53          # query a specific resolver instead of the system one
+      types: [A, AAAA, NS]
+    http:
+      url: https://www.cloudflare.com/cdn-cgi/trace
+      body_contains: "h=www.cloudflare.com"   # assert on the response body
+    tls: {}
+    tcp: {}
+
+  - name: wikipedia
+    host: en.wikipedia.org
+    group: content
+    dns: {}
+    http:
+      url: https://en.wikipedia.org/wiki/Main_Page
+    tls: {}
+
+  # ── DNS infrastructure ───────────────────────────────────────────────────
+  - name: quad9-dns
+    host: 9.9.9.9          # an IP host: DNS check does a reverse (PTR) lookup
+    group: dns
+    dns: {}
+    tcp:
+      port: 53             # DNS over TCP port reachability + RTT
+
+  - name: cloudflare-dns
+    host: one.one.one.one
+    group: dns
+    dns:
+      expect: ["1.1.1.1"]  # fail if this record ever disappears
+    tls:
+      port: 853            # DNS-over-TLS endpoint certificate
+    tcp:
+      port: 853
+
+  # ── TLS canaries ─────────────────────────────────────────────────────────
+  # badssl.com hosts deliberately broken endpoints. They are expected to
+  # FAIL and demonstrate how netpulse reports certificate problems.
+  - name: expired-cert
+    host: expired.badssl.com
+    group: canary
+    tls: {}
+
+  - name: self-signed-cert
+    host: self-signed.badssl.com
+    group: canary
+    tls: {}
+
+  - name: wrong-host-cert
+    host: wrong.host.badssl.com
+    group: canary
+    tls: {}
+
+  # ── Reference of every option (commented out) ────────────────────────────
+  # - name: my-api                    # unique; letters, digits, . _ -
+  #   host: api.example.com           # bare hostname or IP (no scheme)
+  #   group: production               # free-form label for grouping/filtering
+  #   interval: 15s                   # overrides the global interval
+  #   timeout: 5s                     # overrides the global timeout
+  #   dns:
+  #     server: 8.8.8.8:53            # default: first nameserver in /etc/resolv.conf
+  #     types: [A, AAAA, CNAME, MX, TXT, NS, CAA]
+  #     expect: ["203.0.113.10"]      # every value must be present in answers
+  #     latency_warn: 300ms
+  #   http:
+  #     url: https://api.example.com/healthz   # default: https://<host>/
+  #     method: GET                   # GET HEAD POST PUT PATCH DELETE OPTIONS
+  #     headers:
+  #       Authorization: "Bearer ${API_TOKEN}"
+  #     body: '{"ping":true}'
+  #     expect_status: [200, 204]     # default: any 2xx or 3xx
+  #     body_contains: '"status":"ok"'
+  #     follow_redirects: true
+  #     insecure_skip_verify: false
+  #     ca_file: /etc/ssl/internal-ca.pem   # trust a private CA (PEM bundle)
+  #     latency_warn: 1500ms
+  #   tls:
+  #     port: 443
+  #     server_name: api.example.com  # SNI / hostname to verify (default: host)
+  #     ca_file: /etc/ssl/internal-ca.pem
+  #     warn_days: 30
+  #     crit_days: 7
+  #     latency_warn: 1s
+  #   tcp:
+  #     port: 443
+  #     count: 3                      # connection attempts per run
+  #     probe_interval: 100ms         # pause between attempts
+  #     latency_warn: 250ms

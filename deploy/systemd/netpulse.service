@@ -1,0 +1,56 @@
+# systemd unit for running NetPulse as a hardened Linux service.
+#
+#   sudo install -m 0755 netpulse /usr/local/bin/netpulse
+#   sudo install -D -m 0644 netpulse.yaml /etc/netpulse/netpulse.yaml
+#   sudo cp netpulse.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now netpulse
+#
+#   journalctl -u netpulse -f          # logs
+#   sudo systemctl reload netpulse     # hot-reload config (sends SIGHUP)
+
+[Unit]
+Description=NetPulse network health checker
+Documentation=https://github.com/agarwala-ayush/netpulse
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/bin/netpulse validate --config /etc/netpulse/netpulse.yaml
+ExecStart=/usr/local/bin/netpulse serve --config /etc/netpulse/netpulse.yaml --log-format json
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+
+# --- Sandboxing -----------------------------------------------------------
+# NetPulse only needs outbound network access and to read its config.
+DynamicUser=yes
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+# --- Resource limits ------------------------------------------------------
+LimitNOFILE=65536
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target
